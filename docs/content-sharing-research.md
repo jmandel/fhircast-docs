@@ -102,63 +102,33 @@ A frequent scenario which illustrates a diagnostic report centered workflow invo
 
 The clinical user takes a measurement using the imaging reading application which then provides the reporting application this measurement by making a [`DiagnosticReport-update` request](#fhir-resource-update-message) to the Hub. The reporting application receives the measurement through a [`DiagnosticReport-update` event](#fhir-resource-update-message) from the Hub and adds this information to the report. As the clinical user continues the reporting process they select a measurement or other structured information in the reporting application, the reporting application may note this selection by posting a [`DiagnosticReport-select` request](#fhir-resource-select-message) to the Hub. Upon receiving the [`DiagnosticReport-select` event](#fhir-resource-select-message) the image reading application may navigate to the image on which this measurement was acquired.
 
-**ToDo: Here's where we left off**
-
-At some point the image reading application (automatically or through user interaction) may determine that an advanced quantification application should be used and launches this application including the appropriate FHIRcast topic.  The advanced quantification application then requests the current context including any already exchanged structured information by making a [`GET` topic request](#GET-context-request) to the Hub which returns the context in the response.
+At some point the image reading application (automatically or through user interaction) may determine that an advanced quantification application should be used and launches this application including the appropriate FHIRcast topic.  The advanced quantification application then requests the current context including any already exchanged structured information by making a [`GET` topic request](#GET-topic-request) to the Hub which returns the context in the response.
 
 Finally the clinical user closes the report in the reporting application. The reporting application posts a [DiagnosticReport-close event](#diagnostic-report-close-message). Upon receipt of the [DiagnosticReport-close event](#diagnostic-report-close-message) both the imaging reading application and advanced quantification application close all relevant image studies.
 
-### HTTP Method GET to HTTP Endpoint: base-hub-URL/<topic>
+### GET Topic Request
+
+HTTP Method GET
+Endpoint: base-hub-URL/<topic>
 Returns: This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies how the context was created. For example, a DiagnosticReport-open event will create a new context with `contextType=DiagnosticReport`.
 
 Each resource is listed in Key/Resource pairs to follow the FHIRCast spec for event notifications.
 
-Example: two context resources, one DiagnosticReport and one ImagingStudy.  Note that the DiagnosticReport uses the **contained** field for observations. The contained entire Observation resource must be included in the contained field - references are not allowed.
+Example: A context of type DiagnosticReport must contain:
+* DiagnosticReport
+* Patient (referenced by DiagnosticReport)
+
+and as an example may contain:
+* ImagingStudy (which would reference Patient)
+* Observation
+* Media (usually passed by reference)
+
+
+NOTE on Media Reference: The reference should contain the absolute URL of the resource. The client application that wishes to retrieve the Hub resource will obtain the resource from the Hub FHIR service as described in the section [Get Resource](#get-resource) section further on in this document.
+
 
 ```
 [
-  {
-    "contextType": "ImagingStudy",
-    "context": [
-      {
-        "key": "patient",
-        "resource": {
-          "resourceType": "Patient",
-          "id": "ewUbXT9RWEbSj5wPEdgRaBw3",
-          "identifier": [
-            {
-              "system": "urn:oid:1.2.840.114350",
-              "value": "185444"
-            }
-          ]
-        }
-      },
-      {
-        "key": "study",
-        "resource": {
-          "resourceType": "ImagingStudy",
-          "description": "CHEST XRAY",
-          "started": "2010-01-30T23:00:00.000Z",
-          "status": "available",
-          "id": "8i7tbu6fby5ftfbku6fniuf",
-          "identifier": [
-            {
-              "type": {
-                "coding": [
-                  {
-                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
-                    "code": "ACSN"
-                  }
-                ]
-              },
-              "value": "342123458"
-            }
-          ],
-          "patient": { "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3" }
-        }
-      }
-    ]
-  },
   {
     "contextType": "DiagnosticReport",
     "context": [
@@ -166,7 +136,7 @@ Example: two context resources, one DiagnosticReport and one ImagingStudy.  Note
         "key": "patient",
         "resource": {
           "resourceType": "Patient",
-          "id": "ewUbXT9RWEbSj5wPEdgRaBw3",
+          "id": "4b6de2b1f1c343888c2ffb751ccfb349",
           "identifier": [
             {
               "system": "urn:oid:1.2.840.114350",
@@ -182,7 +152,7 @@ Example: two context resources, one DiagnosticReport and one ImagingStudy.  Note
           "description": "CHEST XRAY",
           "started": "2010-01-30T23:00:00.000Z",
           "status": "available",
-          "id": "8i7tbu6fby5ftfbku6fniuf",
+          "id": "aa6c6aa3875d41e0b0e7222bfa553b2a",
           "identifier": [
             {
               "type": {
@@ -196,7 +166,9 @@ Example: two context resources, one DiagnosticReport and one ImagingStudy.  Note
               "value": "342123458"
             }
           ],
-          "subject": { "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3" }
+          "patient": {
+            "reference": "Patient/4b6de2b1f1c343888c2ffb751ccfb349"
+          }
         }
       },
       {
@@ -205,52 +177,55 @@ Example: two context resources, one DiagnosticReport and one ImagingStudy.  Note
           "resourceType": "DiagnosticReport",
           "id": "40012366",
           "status": "unknown",
-          "subject": { "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3" }
-          "imagingStudy": [ { "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf" } ],
-          "contained": [
+          "imagingStudy": [
             {
-              "resourceType": "Observation",
-              "id": "9450878527",
-              "identifier": [
-                {
-                  "system": "dcm:121151",
-                  "value": "L1"
-                }
-              ],
-              "status": "preliminary",
-              "issued": "2001-07-23T06:02:11-04:00",
-              "component": [
-                {
-                  "code": {
-                    "coding": [
-                      {
-                        "system": "https://loinc.org",
-                        "code": "21889-1",
-                        "display": "Distance"
-                      }
-                    ]
-                  },
-                  "valueQuantity": {
-                    "system": "http://unitsofmeasure.org",
-                    "value": "30.3134634578934",
-                    "code": "mm",
-                    "unit": "mm"
-                  }
-                }
-              ],
-              "category": {
-                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-                "code": "imaging",
-                "display": "Imaging"
-              },
-              "code": {
-                "system": "http://hl7.org/fhir/ValueSet/observation-codes",
-                "code": "32449-1",
-                "display": "Physical findings of Lung"
-              }
+              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
             }
           ]
         }
+      }, {
+        "resourceType": "Observation",
+        "id": "4b6de2b1f1c343888c2ffb751ccfb349",
+        "identifier": [
+          {
+            "system": "dcm:121151",
+            "value": "L1"
+          }
+        ],
+        "status": "preliminary",
+        "issued": "2001-07-23T06:02:11-04:00",
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "https://loinc.org",
+                  "code": "21889-1",
+                  "display": "Distance"
+                }
+              ]
+            },
+            "valueQuantity": {
+              "system": "http://unitsofmeasure.org",
+              "value": "30.3134634578934",
+              "code": "mm",
+              "unit": "mm"
+            }
+          }
+        ],
+        "category": {
+          "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+          "code": "imaging",
+          "display": "Imaging"
+        },
+        "code": {
+          "system": "http://hl7.org/fhir/ValueSet/observation-codes",
+          "code": "32449-1",
+          "display": "Physical findings of Lung"
+        }
+      },
+      {
+        /Media/8e7519362aeb4c10885e03a7287fedaf"
       }
     ]
   }
