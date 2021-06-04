@@ -106,32 +106,109 @@ At some point the image reading application (automatically or through user inter
 
 Finally the clinical user closes the report in the reporting application. The reporting application posts a [DiagnosticReport-close event](#diagnostic-report-close-message). Upon receipt of the [DiagnosticReport-close event](#diagnostic-report-close-message) both the imaging reading application and advanced quantification application close all relevant image studies.
 
-### GET Topic Request
+ 
+## Normative Standard
+### Subscription Response
+Upon receiving subscription or unsubscription requests, the Hub SHALL respond to a subscription request with an HTTP 202 "Accepted" response. This indicates that the request was received and will now be verified by the Hub. When using websockets, the HTTP body of the response SHALL consist of a JSON object containing an element name of `hub.channel.endpoint` and a value of the WSS URL. The websocket WSS URL SHALL be cryptographically random, unique, and unguessable. If using webhooks, the Hub SHOULD perform verification of intent as soon as possible.
 
-HTTP Method GET
+If a Hub refuses the request or finds any errors in the subscription request, an appropriate HTTP error response code (4xx or 5xx) SHALL be returned. In the event of an error, the Hub SHOULD return a description of the error in the response body as plain text, to be used by the client developer to understand the error. This is not meant to be shown to the end user. Hubs MAY decide to reject some subscription requests based on their own policies.
+
+#### `websocket` Return of Current Context
+If using websockets and a Hub accepts the subscription request, the Hub MAY return the current context of the topic. The current context is returned in a `contexts` array in the JSON response body. If there is no current context, the result will be an empty array ("[ ]").
+
+If using webhooks the current context is not present in the subscription mechanism. After successful subscription, the subscriber may obtain the current context by making a [GetContext](#get-context) request.
+
+### `webhook` vs `websocket`
+
+A Hub SHALL support websockets and MAY support webhooks subscriptions. A subscriber specifies the preferred `hub.channel.type` of either `webhook` or `websocket` during creation of its subscription. Websockets are particularly useful if a subscriber is unable to host an accessible callback URL.
+
+> Implementer feedback is solicited around the optionality and possible deprecation of webhooks.
+
+#### `webhook` Subscription Request Example
+In this example, the app asks to be notified of the `patient-open` and `patient-close` events.
+```
+POST https://hub.example.com
+Host: hub.example.com
+Authorization: Bearer i8hweunweunweofiwweoijewiwe
+Content-Type: application/x-www-form-urlencoded
+
+hub.channel.type=webhook&hub.callback=https%3A%2F%2Fapp.example.com%2Fsession%2Fcallback%2Fv7tfwuk17a&hub.mode=subscribe&hub.topic=fdb2f928-5546-4f52-87a0-0648e9ded065&hub.secret=shhh-this-is-a-secret&hub.events=patient-open,patient-close
+```
+
+#### `webhook` Subscription Response Example 
+```
+HTTP/1.1 202 Accepted
+```
+
+#### `websocket` Initial Subscription Request Example
+In this example, the app creates an initial subscription and asks to be notified of the `patient-open` and `patient-close` events.
+```
+POST https://hub.example.com
+Host: hub.example.com
+Authorization: Bearer i8hweunweunweofiwweoijewiwe
+Content-Type: application/x-www-form-urlencoded
+
+hub.channel.type=websocket&hub.mode=subscribe&hub.topic=fdb2f928-5546-4f52-87a0-0648e9ded065&hub.events=patient-open,patient-close
+```
+
+#### `websocket` Subscription Response Example
+```
+HTTP/1.1 202 Accepted
+
+{   
+ "hub.channel.endpoint": wss://hub.example.com/ee30d3b9-1558-464f-a299-cbad6f8135de
+}
+```
+
+ #### `websocket` Subscription Response Example with Return of the Current Context
+```
+HTTP/1.1 202 Accepted
+
+{   
+ "hub.channel.endpoint": wss://hub.example.com/ee30d3b9-1558-464f-a299-cbad6f8135de
+  "contexts": [
+     ... see example contexts in Get Context below
+  ]
+}
+```
+### Get Context
+HTTP Method: GET
 Endpoint: base-hub-URL/<topic>
-Returns: This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies how the context was created. For example, a DiagnosticReport-open event will create a new context with `contextType=DiagnosticReport`.
+Returns: This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies the resource type of the anchor context. For example, a DiagnosticReport-open event will create a new context with `contextType: "DiagnosticReport"`.
 
-Each resource is listed in Key/Resource pairs to follow the FHIRCast spec for event notifications.
+Each resource is listed in Key/Resource pairs.
 
-Example: A context of type DiagnosticReport must contain:
-* DiagnosticReport
-* Patient (referenced by DiagnosticReport)
-
-and as an example may contain:
-* ImagingStudy (which would reference Patient)
+Example: an anchor context of type DiagnosticReport may include context resource types:
+* Diagnostic Report (report that is the anchor context)
+* Patient
+* ImagingStudy
 * Observation
-* Media (usually passed by reference)
-
-
-NOTE on Media Reference: The reference should contain the absolute URL of the resource. The client application that wishes to retrieve the Hub resource will obtain the resource from the Hub FHIR service as described in the section [Get Resource](#get-resource) section further on in this document.
-
-
+* Media (usually passed by an absolute URL reference)
+ 
 ```
 [
   {
     "contextType": "DiagnosticReport",
     "context": [
+      {
+        "key": "Report",
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "id": "40012366",
+          "meta": {
+             "versionId": "2"
+          },
+          "status": "unknown",
+          "subject": {
+            "reference": "Patient/4b6de2b1f1c343888c2ffb751ccfb349",
+          },
+          "imagingStudy": [
+            {
+              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
+            }
+          ]
+        }
+      },
       {
         "key": "patient",
         "resource": {
@@ -172,18 +249,6 @@ NOTE on Media Reference: The reference should contain the absolute URL of the re
         }
       },
       {
-        "key": "Report",
-        "resource": {
-          "resourceType": "DiagnosticReport",
-          "id": "40012366",
-          "status": "unknown",
-          "imagingStudy": [
-            {
-              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
-            }
-          ]
-        }
-      }, {
         "resourceType": "Observation",
         "id": "4b6de2b1f1c343888c2ffb751ccfb349",
         "identifier": [
@@ -194,6 +259,9 @@ NOTE on Media Reference: The reference should contain the absolute URL of the re
         ],
         "status": "preliminary",
         "issued": "2001-07-23T06:02:11-04:00",
+        "derivedFrom": {
+          "reference": "ImagingStudy/aa6c6aa3875d41e0b0e7222bfa553b2a"
+        },
         "component": [
           {
             "code": {
@@ -223,19 +291,16 @@ NOTE on Media Reference: The reference should contain the absolute URL of the re
           "code": "32449-1",
           "display": "Physical findings of Lung"
         }
-      },
-      {
-        /Media/8e7519362aeb4c10885e03a7287fedaf"
       }
     ]
   }
 ]
 ```
 
-### Diagnostic Report Open Request and Event
-A `DiagnosticReport-open` request is posted to the Hub when a new or existing report is opened by an application. The `context` field contains one `Patient` FHIR resource and one `DiagnosticReport` FHIR resource. If the report being opened is a new report, the report status should be "unknown". For an anchor context such as a DiagnosticReport, an implementation guide could require specific contexts to be present.  For example, an implementation guide using a DiagnosticReport anchor context could require an imaging study context be present in the DiagnosticReport-open request. Note that one or more primary studies (those which are the primary subject of the report) may be included and zero or more comparison (prior) studies may also be present.
+### DiagnosticReport-open (note, should this go into the FHIRcast event catalog?)
+A `DiagnosticReport-open` request is posted to the Hub when a new or existing report is opened by an application and established as the anchor context of a topic. The `context` field contains one `Patient` resource and one `DiagnosticReport` resource.
 
-When the Hub distributes a DiagnosticReport-open event, it associates a versionId with the DiagnosticReport so that subscribed applications may submit this versionId in subsequent DiagnosticReport-update requests.
+When the Hub distributes a DiagnosticReport-open event, it associates a versionId with the DiagnosticReport.  Subscribed applications MUST submit this versionId in subsequent DiagnosticReport-update requests.
 
 When a DiagnosticReport-open event is received by an application, the application should respond as is appropriate for its clinical use.  For example, an image reading application may want to respond to an event posted by a reporting application by opening the imaging study(ies) specified in the context. A reporting application may want to respond to an event posted by an image reading application by creating and opening a new report (or existing report as an addendum).
 
@@ -244,9 +309,9 @@ When a DiagnosticReport-open event is received by an application, the applicatio
 #### Context
 Key | Optionality | FHIR operation to generate context | Description
 --- | --- | --- | ---
-`patient` | REQUIRED | `Patient/{id}?_elements=identifier` | FHIR Patient resource describing the patient associated with the diagnostic report currently in context.
-`study` | OPTIONAL | `ImagingStudy/{id}?_elements=identifier,accession` | FHIR ImagingStudy resource in context. Note that in addition to the request identifier and accession elements, the DICOM uid and FHIR patient reference are included because they're required by the FHIR specification.  Implementation guides may specify that this context is required (not optional).
 `report`| REQUIRED | `DiagnosticReport/{id}?_elements=identifier,accession` | FHIR DiagnosticReport resource in context
+`patient` | REQUIRED | `Patient/{id}?_elements=identifier` | FHIR Patient resource describing the patient associated with the diagnostic report currently in context.
+`study` | OPTIONAL | `ImagingStudy/{id}?_elements=identifier,accession` | FHIR ImagingStudy resource in context. Note that in addition to the request identifier and accession elements, the DICOM uid and FHIR patient reference are included because they're required by the FHIR specification.  Hub specific implementation guides may specify that this context is required.
 
 ##### DiagnosticReport-open Example Request
 The following example shows a report being opened that contains a single primary study.  Note that the diagnostic report's `imagingStudy` and `subject` attributes have references to the imaging study and patient which are also in the open request.
@@ -258,6 +323,22 @@ The following example shows a report being opened that contains a single primary
     "hub.topic": "DrXRay",
     "hub.event": "DiagnosticReport-open",
     "context": [
+      {
+        "key": "Report",
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "id": "40012366",
+          "status": "unknown",
+          "subject": {
+            "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
+          },
+          "imagingStudy": [
+            {
+              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
+            }
+          ]
+        }
+      },
       {
         "key": "patient",
         "resource": {
@@ -299,22 +380,6 @@ The following example shows a report being opened that contains a single primary
           "subject": {
             "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
           }
-        }
-      },
-      {
-        "key": "Report",
-        "resource": {
-          "resourceType": "DiagnosticReport",
-          "id": "40012366",
-          "status": "unknown",
-          "subject": {
-            "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
-          },
-          "imagingStudy": [
-            {
-              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
-            }
-          ]
         }
       }
     ]
@@ -333,6 +398,25 @@ The event distributed by the Hub includes a meta section in the anchor context o
     "hub.event": "DiagnosticReport-open",
     "context": [
       {
+        "key": "Report",
+        "resource": {
+          "resourceType": "DiagnosticReport",
+          "id": "40012366",
+          "meta": {
+            "versionId": "0"
+          },
+          "status": "unknown",
+          "subject": {
+            "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
+          },
+          "imagingStudy": [
+            {
+              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
+            }
+          ]
+        }
+      },
+      {
         "key": "patient",
         "resource": {
           "resourceType": "Patient",
@@ -373,25 +457,6 @@ The event distributed by the Hub includes a meta section in the anchor context o
           "subject": {
             "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
           }
-        }
-      },
-      {
-        "key": "Report",
-        "resource": {
-          "resourceType": "DiagnosticReport",
-          "id": "40012366",
-          "meta": {
-            "versionId": "0"
-          },
-          "status": "unknown",
-          "subject": {
-            "reference": "Patient/ewUbXT9RWEbSj5wPEdgRaBw3"
-          },
-          "imagingStudy": [
-            {
-              "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
-            }
-          ]
         }
       }
     ]
