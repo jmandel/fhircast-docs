@@ -172,9 +172,10 @@ HTTP/1.1 202 Accepted
 }
 ```
 ### Get Context
-HTTP Method: GET
-Endpoint: base-hub-URL/<topic>
-Returns: This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies the resource type of the anchor context. For example, a DiagnosticReport-open event will create a new context with `contextType: "DiagnosticReport"`.
+HTTP Method: GET<br>
+Endpoint: base-hub-URL/{topic}<br>
+Returns:<br>
+This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies the resource type of the anchor context. For example, a DiagnosticReport-open event will create a new context with `contextType: "DiagnosticReport"`.
 
 Each resource is listed in Key/Resource pairs.
 
