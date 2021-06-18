@@ -114,7 +114,7 @@ Upon receiving subscription or unsubscription requests, the Hub SHALL respond to
 If a Hub refuses the request or finds any errors in the subscription request, an appropriate HTTP error response code (4xx or 5xx) SHALL be returned. In the event of an error, the Hub SHOULD return a description of the error in the response body as plain text, to be used by the client developer to understand the error. This is not meant to be shown to the end user. Hubs MAY decide to reject some subscription requests based on their own policies.
 
 #### `websocket` Return of Current Context
-If using websockets and a Hub accepts the subscription request, the Hub MAY return the current context of the topic. The current context is returned in a `contexts` array in the JSON response body. If there is no current context, the result will be an empty array ("[ ]").
+If using websockets and a Hub accepts the subscription request, the Hub MAY return the current context of the topic. The current context is returned in a `contexts` array in the JSON response body; if there is no current context the response SHALL contain an empty array ("[ ]").
 
 If using webhooks the current context is not present in the subscription mechanism. After successful subscription, the subscriber may obtain the current context by making a [GetContext](#get-context) request.
 
@@ -177,14 +177,7 @@ Endpoint: base-hub-URL/{topic}<br>
 Returns:<br>
 This method returns an object containing the current context of the topic session. The current context is made up of one or more "top-level" contextual resource types such as an ImagingStudy or a DiagnosticReport. The `contextType` field identifies the resource type of the anchor context. For example, a DiagnosticReport-open event will create a new context with `contextType: "DiagnosticReport"`.
 
-Each resource is listed in Key/Resource pairs.
-
-Example: an anchor context of type DiagnosticReport may include context resource types:
-* Diagnostic Report (report that is the anchor context)
-* Patient
-* ImagingStudy
-* Observation
-* Media (usually passed by an absolute URL reference)
+The Hub MAY return the content of the anchor context as elements without a "key" value in the context array.
  
 ```
 [
@@ -192,7 +185,7 @@ Example: an anchor context of type DiagnosticReport may include context resource
     "contextType": "DiagnosticReport",
     "context": [
       {
-        "key": "Report",
+        "key": "report",
         "resource": {
           "resourceType": "DiagnosticReport",
           "id": "40012366",
@@ -230,7 +223,7 @@ Example: an anchor context of type DiagnosticReport may include context resource
           "description": "CHEST XRAY",
           "started": "2010-01-30T23:00:00.000Z",
           "status": "available",
-          "id": "aa6c6aa3875d41e0b0e7222bfa553b2a",
+          "id": "8i7tbu6fby5ftfbku6fniuf",
           "identifier": [
             {
               "type": {
@@ -261,7 +254,7 @@ Example: an anchor context of type DiagnosticReport may include context resource
         "status": "preliminary",
         "issued": "2001-07-23T06:02:11-04:00",
         "derivedFrom": {
-          "reference": "ImagingStudy/aa6c6aa3875d41e0b0e7222bfa553b2a"
+          "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
         },
         "component": [
           {
@@ -298,7 +291,7 @@ Example: an anchor context of type DiagnosticReport may include context resource
 ]
 ```
 
-### DiagnosticReport-open (note, should this go into the FHIRcast event catalog?)
+### DiagnosticReport-open (QUESTION: should these events go into the FHIRcast event catalog?)
 A `DiagnosticReport-open` request is posted to the Hub when a new or existing report is opened by an application and established as the anchor context of a topic. The `context` field contains one `Patient` resource and one `DiagnosticReport` resource.
 
 When the Hub distributes a DiagnosticReport-open event, it associates a versionId with the DiagnosticReport.  Subscribed applications MUST submit this versionId in subsequent DiagnosticReport-update requests.
@@ -466,7 +459,7 @@ The event distributed by the Hub includes a meta section in the anchor context o
 ```
 
 ### Diagnostic Report Update Message
-A `DiagnosticReport-update` request will be posted to the Hub when an application desires a change be made to the current state of exchanged information or to add or remove an imaging study to the context of the report.
+A `DiagnosticReport-update` request will be posted to the Hub when an application desires a change be made to the current state of exchanged information or to add or remove an imaging study to the context of the report. One or more updates MAY occur while the report is open.
 
 The updates could include (but are not limited to) any of the following:
 * adding, updating, or removing observations
@@ -476,9 +469,11 @@ The updates could include (but are not limited to) any of the following:
 
 The context will contain a Bundle in an updates key which contains one or more resources as entries in the Bundle.
 
-The exchange of information is made using a transactional approach using change sets in the `DiagnosticReport-update` event (i.e. not the complete current state); therefore it is essential that applications interested in the current state of exchanged information process all events and process the events in the order in which they were successfully received by the Hub.  Each `DiagnosticReport-update` event posted to the Hub will be processed atomically by the Hub.
+The exchange of information is made using a transactional approach using change sets in the `DiagnosticReport-update` event (i.e. not the complete current state); therefore it is essential that applications interested in the current state of exchanged information process all events and process the events in the order in which they were successfully received by the Hub.  Each `DiagnosticReport-update` event posted to the Hub SHALL be processed atomically by the Hub.
 
-The Hub plays a critical role in helping applications stay in sync with the current state of exchanged information.  On receiving a posted `DiagnosticReport-update` event the Hub will examine the `versionId` of the inbound diagnostic report, which is in the resource's `meta` attribute.   The Hub compares the `versionId` of the incoming request with the `versionId` the Hub previously assigned to the diagnostic report when it received and processed the previous `DiagnosticReport-open` or `DiagnosticReport-update` request. If the incoming `versionId` and last assigned `versionId`  do not match, the message is rejected and the Hub returns an HTTP error status code of 428 (Precondition Required). If the `versionId` values match, the Hub proceeds with processing each of the FHIR resources in the Bundle.  After updating its copy of the current state of exchanged information, the Hub assigns a new `versionId` to the diagnostic report and uses this new `versionId` in the `DiagnosticReport-update` event it forwards to subscribed applications.  The distributed update event contains the same Bundle resource which was contained in the request. 
+The Hub plays a critical role in helping applications stay synchronized with the current state of exchanged information.  On receiving a posted `DiagnosticReport-update` event the Hub SHALL examine the `versionId` of the inbound diagnostic report, which is in the resource's `meta` attribute.   The Hub SHALL compare the `versionId` of the incoming request with the `versionId` the Hub previously assigned to the diagnostic report state (i.e, the `versionId` assigned when the previous `DiagnosticReport-open` or `DiagnosticReport-update` request was processed). If the incoming `versionId` and last assigned `versionId`  do not match, the message SHALL be rejected and the Hub SHALL return a 4xx/5xx HTTP Status Code.
+ 
+If the `versionId` values match, the Hub proceeds with processing each of the FHIR resources in the Bundle and SHALL process all Bundle entries in an atomic manner.  After updating its copy of the current state of exchanged information, the Hub SHALL assign a new `versionId` to the diagnostic report state and use this new `versionId` in the `DiagnosticReport-update` event it forwards to subscribed applications.  The distributed update event SHALL contain a Bundle resource with the same Bundle `id` which was contained in the request. 
 
 When a  `DiagnosticReport-update` event is received by an application, the application should respond as is appropriate for its clinical use.    For example, an image reading application may choose to ignore an observation describing a patient's blood pressure.  Since transactional change sets are used during information exchange, no problems are caused by applications deciding to ignore exchanged information not relevant to their function.
 
@@ -488,126 +483,14 @@ Key | Optionality | Description
 `report`| REQUIRED | FHIR DiagnosticReport resource in context is included for risk mitigation. The `id` and `versionId` of the diagnostic report SHALL be provided; however, additional attributes MAY be present.
 `updates`| REQUIRED | Contains one and only one FHIR Bundle resource with a `type` of `transaction`. The Bundle contains 1 to n entries with each `entry` containing a FHIR resource containing structured information that according to the `method` of the entry's `request` attribute should be added (POST), updated (PUT), or removed (DELETE) from the current state of exchanged structured information.
 
-Resource Types that the Hub SHALL Support in the Transaction Bundle:
+#### Supported Update Request Methods
+Request Method | Operation
+--- | --- | ---
+`PUT`| Replace/update an existing resource
+`POST`| Add a new resource
+`DELETE`| Remove an existing resource
 
-Resource Type | Comments
---- | ---
-DiagnosticReport | Only updates (PUT) on the diagnostic report in the current context are supported. The DiagnosticReport resource `id` MUST match the `id` of the current report. The purpose of this operation is to allow other report attributes (such as report status or referenced imaging studies) to be updated.
-ImagingStudy | Both primary studies and comparison studies (priors) are supported in the same manner as the [DiagnosticReport-open event](#diagnostic-report-open-message). All request types (POST, PUT, DELETE) are supported.<br><table>  <thead>  <tr>  <th>Request Type</th>  <th>Comments</th>  </tr>  </thead>  <tbody>  <tr>  <td>POST</td>  <td>Add a new study to the current report, the use of the study as a primary or comparison (prior) study is indicated by updating the imagingStudy attribute in the DiagnosticReport in the same Bundle (see  [DiagnosticReport-open event](#diagnostic-report-open-message))</td>  </tr>  <tr>  <td>PUT</td>  <td>Update attributes of an imaging study already identified as a subject of the report</td>  </tr>  <tr>  <td>DELETE</td>  <td>Remove an imaging study already identified as a subject of the report</td>  </tr>  </tbody>  </table>
-Observation | All request types (POST, PUT, DELETE) are supported.<br><table>  <thead>  <tr>  <th>Request Type</th>  <th>Comments</th>  </tr>  </thead>  <tbody>  <tr>  <td>POST</td>  <td>Add a new resource</td>  </tr>  <tr>  <td>PUT</td>  <td>Replace/update an existing resource</td>  </tr>  <tr>  <td>DELETE</td>  <td>Remove an existing resource</td>  </tr>  </tbody>  </table>
-
-Hubs may choose to support additional resource types.
-
-##### DiagnosticReport-update Request Example (Adding an Observation)
-The following example shows a request to add an observation to the current state of the exchanged information.
-
-```
-{
-  "timestamp": "2020-09-07T15:00:15.939Z",
-  "id": "0404011",
-  "event": {
-    "hub.topic": "DrXRay",
-    "hub.event": "DiagnosticReport-update",
-    "context": [
-      {
-        "key": "report",
-        "resource": {
-          "resourceType": "DiagnosticReport",
-          "id": "40012366",
-          "meta": {
-            "versionId": "0"
-          }
-        }
-      },
-      {
-        "key": "updates",
-        "resource": {
-          "resourceType": "Bundle",
-          "id": "345345345",
-          "type": "transaction",
-          "entry": [
-            {
-              "request": {
-                "method": "POST"
-              },
-              "resource": {
-                "resourceType": "Observation",
-                "id": "435098234",
-                "partOf": {
-                  "reference": "ImagingStudy/8i7tbu6fby5ftfbku6fniuf"
-                },
-                "status": "preliminary",
-                "category": {
-                  "system": "http://terminology.hl7.org/CodeSystem/observation-category",
-                  "code": "imaging",
-                  "display": "Imaging"
-                },
-                "code": {
-                  "coding": [
-                    {
-                      "system": "http://hl7.org/fhir/ValueSet/observation-codes",
-                      "code": "10193-1",
-                      "display": "Physical findings of Breasts Narrative"
-                    }
-                  ]
- 
-                },
-                "issued": "2020-09-07T14:59:55.848Z",
-                "identifier": [
-                  {
-                    "system": "dcm:121151",
-                    "value": "Lesion-1"
-                  }
-                ],
-                "component": [
-                  {
-                    "code": {
-                      "coding": [
-                        {
-                          "system": "https://loinc.org",
-                          "code": "21889-1",
-                          "display": "Size Tumor"
-                        }
-                      ]
-                    },
-                    "valueQuantity": {
-                      "value": "13.3",
-                      "unit": "mm",
-                      "system": "http://unitsofmeasure.org",
-                      "code": "mm"
-                    }
-                  },
-                  {
-                    "code": {
-                      "coding": [
-                        {
-                          "system": "dcm",
-                          "code": "121242",
-                          "display": "Distance from Nipple"
-                        }
-                      ]
-                    },
-                    "valueQuantity": {
-                      "value": "60",
-                      "unit": "mm",
-                      "system": "http://unitsofmeasure.org",
-                      "code": "mm"
-                    }
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      }
-    ]
-  }
-}
-```
-
-The corresponding event distributed by the Hub in response to the above request would replace the versionId in the request with a new versionId generated and retained by the Hub so that it may verify the appropriate versionId is provided in subsequent update requests. 
-
-##### DiagnosticReport-update Request Example for Adding a Comparison (Prior) Study
+##### DiagnosticReport-update Request Example for Adding an Imaging Study and Derived Observation
 The following example shows adding an imaging study to the existing diagnostic report context.  The `context` holds the `id` and `versionId` of the diagnostic report as required in all  `DiagnosticReport-update` events.  The Bundle holds the addition (POST) of an imaging study and adds (POST) an observation derived from this study. 
 
 ```
@@ -698,18 +581,20 @@ The following example shows adding an imaging study to the existing diagnostic r
   }
 }
 ```
-
+The HUB SHALL distribute a corresponding event to all applications currently subscribed to the topic. The Hub SHALL replace the `versionId` in the request with a new `versionId` generated and retained by the Hub.
 
 ### Diagnostic Report Select Message
-The `DiagnosticReport-select` event will be posted to the Hub when an application desires to indicate that it has selected a specific resource as it is represented in its user interface. This event allows other participating applications to adjust their UIs as appropriate.  For example, a reporting system may indicate that the user has selected a particular observation associated with a measurement value — after receiving this event an imaging reading application which created the measurement may wish to change its user display such that the image from which the measurement was acquired is visible. If a resource is noted as selected, this indicates that any other resource which had been selected is no longer selected (i.e. an implicit unselect of the previously selected resource).  Additionally, an application may indicate that all selections have been cleared by posting a `DiagnosticReport-select` with an empty `select` array.
+The `DiagnosticReport-select` event will be posted to the Hub when an application desires to indicate that one or more FHIR resources are to be made visible, in focus or otherwise "selected". It is assumed that an observation with the specified `id` is contained in the current DiagnosticReport content, the Hub MAY or MAY NOT provide validation.
+ 
+This event allows other participating applications to adjust their UIs as appropriate.  For example, a reporting system may indicate that the user has selected a particular observation associated with a measurement value. After receiving this event an imaging reading application which created the measurement may wish to change its user display such that the image from which the measurement was acquired is visible.
 
-NOTE: While it is assumed that an observation with an id of a67tbi5891trw123u6f9134 is contained in the current DiagnosticReport content, the Hub DOES NOT provide validation
+If a resource is noted as selected, any other resource which had been selected is no longer selected (i.e. an implicit unselect of the previously selected resource).  Additionally, an application may indicate that all selections have been cleared by posting a `DiagnosticReport-select` with an empty `select` array.
 
 #### Context
 Key | Optionality | Description
 --- | --- | ---
 `report`| REQUIRED | FHIR DiagnosticReport resource in context is included for risk mitigation. The `id` and `versionId` of the diagnostic report SHALL be provided; however, additional attributes MAY be present.
-`select`| REQUIRED | Contains zero or more references to the selected resources. If a reference to a resource is present in the `select` array, there is an implicit unselect of any previously selected resource. If no resource references are present in the `select` array this is an indication that any previously selected resource is now unselected.
+`select`| REQUIRED | Contains zero or more references to selected resources. If a reference to a resource is present in the `select` array, there is an implicit unselect of any previously selected resource. If no resource references are present in the `select` array, this is an indication that any previously selected resource is now unselected.
 
 ##### DiagnosticReport-select Example
 The following example shows the selection of a single Observation resource. 
@@ -728,7 +613,7 @@ The following example shows the selection of a single Observation resource.
           "resourceType": "DiagnosticReport",
           "id": "40012366",
           "meta": {
-            "versionId": "2019-08-23T22:21:42.11"
+            "versionId": "1"
           }
         }
       },
@@ -745,12 +630,11 @@ The following example shows the selection of a single Observation resource.
 }
 ```
 
-
 ### Diagnostic Report Close Message
 The `DiagnosticReport-close` event is posted to the Hub when an application desires to close the active diagnostic report centered workflow.
 
 ##### DiagnosticReport-close Example
-This example sets the status of the report to `final`.
+This example sets the `status` of the report to `final`.
 
 ```
 {
