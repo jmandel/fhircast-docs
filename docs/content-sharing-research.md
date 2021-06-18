@@ -485,7 +485,7 @@ Key | Optionality | Description
 
 #### Supported Update Request Methods
 Request Method | Operation
---- | --- | ---
+--- | ---
 `PUT`| Replace/update an existing resource
 `POST`| Add a new resource
 `DELETE`| Remove an existing resource
