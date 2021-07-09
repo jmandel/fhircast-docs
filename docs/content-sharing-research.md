@@ -38,7 +38,7 @@ Hubs must fulfill these addition responsibilities when supporting information ex
 1. Assign and maintain an anchor context's `versionId` when processing a [`[FHIR resource]-open`](#fhir-resource-open) request
 2. Validate [`[FHIR resource]-update`](#fhir-resource-update) and [`[FHIR resource]-select`](#fhir-resource-select) requests for the correct `versionId` and reject the request if the version does not match the current `versionId` by returning a 4xx/5xx HTTP Status Code rather than updating the content
 3. Assign and maintain a new `versionId` for the anchor context's content and provide the new `versionId` in the event corresponding to the validated request 
-4. Maintain a list of current FHIR resource content in the anchor context so that it may provide the anchor context's content in response to a [`[FHIR resource]-open`](#fhir-resource-open) request and when responding to a [`GET Context`](get-context) request
+4. Maintain a list of current FHIR resource content in the anchor context so that it may provide the anchor context's content in response to a [`[FHIR resource]-open`](#fhir-resource-open) request and when responding to a [`GET Context`](#get-context) request
 5. When a [`[FHIR resource]-close`](#fhir-resource-close)  request is received, the Hub no longer retains the content for that anchor context
 
 A Hub is not responsible for structurally validating FHIR resources.  While a Hub must be able to successfully parse FHIR resources in a manner sufficient to perform its required capabilities (e.g. find the `id` of a resource and the `versionId` of the anchor context's content), a Hub is not responsible for additional structural checking. 
@@ -53,19 +53,18 @@ Clients wishing to exchange structure information must:
 3. Make a [`[FHIR resource]-update`](#fhir-resource-update) request when appropriate. The [`[FHIR resource]-update`](#fhir-resource-update) request contains a `Bundle` resource which is a collection of resources that are atomically processed by the Hub with the anchor context's content being adjusted appropriately
 4. Maintain the current `versionId` of the anchor context provided by the Hub so that a subsequent [`[FHIR resource]-update`](#fhir-resource-update) request may provide the current `versionId`
 5. Appropriately process [FHIR resource]-[open|update|select|close] events; note that a client may choose to ignore the contents of a [FHIR resource]-[open|update|select|close] event but should still track the `versionId` for subsequent use
-6. If a [`[FHIR resource]-update`](#fhir-resource-update) request fails with the Hub, the client may issue a [`GET Context`](get-context) request to the Hub in order to retrieve the current content in the anchor context and its current `versionId`
+6. If a [`[FHIR resource]-update`](#fhir-resource-update) request fails with the Hub, the client may issue a [`GET Context`](#get-context) request to the Hub in order to retrieve the current content in the anchor context and its current `versionId`
 7. When using websockets, clients will now receive the current content (if any exists) of the anchor context (if one has been established) in response to the Subscribe request (see [return of current content](`websocket`-return-of-current-content)).  Clients that don't support the exchange of structured information may ignore the content of the Subscribe response payload.
 
-### DIAGNOSTIC REPORT CENTERED WORKFLOW
+### Example of Content Sharing in an Anchor Context
+The below example uses a `DiagnosticReport` as the anchor context.  However, the pattern of the example holds when other FHIR resource types are the anchor context.
 
-For the purpose simplifying the conveyance of the information sharing mechanisms, further details will use a `DiagnosticReport` as the anchor context.  However, all of the below requests and messages support using other FHIR resource types as the anchor context.
+#### Diagnostic Report Workflow Example
+When reporting applications integrate with PACS and/or RIS applications, a radiologist's (or other clinician's) workflow is centered on the final deliverable, a diagnostic report. In radiology the imaging study (exam) is an integral resource with the report referencing one or more imaging studies. Structured data, many times represented by an `Observation` resource, may also be captured as part of a report.  In addition to basic context synchronization, a diagnostic report centered workflow builds upon the basic FHIRcast operations to support near real-time exchange of structured information between applications participating in a diagnostic report context.  Also, the `DiagnosticReport` resource contains certain attributes (such as report status), that are useful to the PACS/RIS applications and don't exist in other types of FHIR resources (e.g. an ImagingStudy).  Participating applications may include clients such as reporting applications, PACS, EHRs, workflow orchestrators, and interactive AI applications.
 
-#### Discussion
-When reporting applications integrate with PACS and/or RIS applications, a radiologist's (or other clinician's) workflow is centered on the final deliverable, a diagnostic report. In radiology the imaging study (exam) is an integral resource with the report referencing one or more imaging studies. Structured data, many times represented by an `Observation` resource, may also be captured as part of a report.  In addition to basic context synchronization, a diagnostic report centered workflow builds upon the basic FHIRcast transactions to support near real-time exchange of structured information between applications participating in a diagnostic report context.  Also, the `DiagnosticReport` resource contains certain attributes (such as report status), that are useful to the PACS/RIS applications and don't exist in other types of FHIR resources (e.g. an ImagingStudy).  Participating applications may include clients such as reporting applications, PACS, EHR, workflow orchestrators, and interactive AI applications.
+Exchanged resources need not have an independent existence. For the purposes of a working session in FHIRcast, they are all "contained" in one resource (the `DiagnosticReport` anchor context). For example, a radiologist may use the PACS viewer to create a measurement. The PACS application sends this measurement as an `Observation` to the other subscribing applications for consideration. If the radiologist determines the measurement is useful in another application (and accurate), it may then become an `Observation` to be included in the diagnostic report. Only when that diagnostic report becomes an official signed document would that `Observation` possibly be maintained with an independent existence. Until that time, FHIR domain resources serve as a convenient means to transfer data within a FHIRcast context.
 
-Observation resources need not have an independent existence. For the purposes of a working session in FHIRcast, they are all "contained" in one resource (the `DiagnosticReport` anchor context). This is important, especially when software applications are communicating information that the user may not even find useful. For example, a radiologist may use the PACS viewer to create a measurement. The PACS application sends this measurement as an `Observation` to the other subscribing applications for consideration. If the radiologist determines the measurement is useful in another application (and accurate), it may then become an `Observation` to be included in the diagnostic report. Only when that diagnostic report becomes an official signed document would that `Observation` possibly be maintained with an independent existence. Until that time, FHIR domain resources serve as a convenient means to transfer data within a FHIRcast context.
-
-Structured information may be added, changed, or removed quite frequently during the lifetime of a Diagnostic Report context. Exchanged information is transitory and it is not required that the information exchanged during the collaboration is persisted. However, as required by their use cases, each participating application may choose to persist information in their own structures which may or may not be expressed as a FHIR resource. Even if stored in the form of a FHIR resource, the resource may or may not be stored in a system which provides access to the information through a FHIR server and associated FHIR operations.
+Structured information may be added, changed, or removed quite frequently during the lifetime of a Diagnostic Report context. Exchanged information is transitory and it is not required that the information exchanged during the collaboration is persisted. However, as required by their use cases, each participating application may choose to persist information in their own structures which may or may not be expressed as a FHIR resource. Even if stored in the form of a FHIR resource, the resource may or may not be stored in a system which provides access to the information through a FHIR server and associated FHIR operations (i.e., it may be persisted only in storage specific to a given application).
 
 #### FHIRcast Notification Request Event Fields
 Field | Optionality | Type | Description
@@ -77,20 +76,19 @@ Field | Optionality | Type | Description
 #### Diagnostic Report Centered Workflow Events
 Operation | Description
 --- | --- 
-[`DiagnosticReport-open`](#diagnostic-report-open-message) | This notification is used to begin a new report. This should be the first event and establishes the anchor context.
-[`DiagnosticReport-update`](#diagnostic-report-update-message) | This notification is used to make changes (updates) to the current report. These changes usually include adding/removing imaging studies and/or observations to the current report.
-[`DiagnosticReport-select`](#diagnostic-report-select-message) | This notification is sent to tell subscribers to make one or more images or observations visible (in focus), such as a measurement (or other finding).
-[`DiagnosticReport-close`](#diagnostic-report-close-message) | This notification is used to close the current diagnostic report anchor context with the current state of the exchanged content stored by subscribed applications as appropriate and cleared from these applications and the Hub. 
+[`DiagnosticReport-open`](#fhir-resource-open) | This notification is used to begin a new report. This should be the first event and establishes the anchor context.
+[`DiagnosticReport-update`](#fhir-resource-update) | This notification is used to make changes (updates) to the current report. These changes usually include adding/removing imaging studies and/or observations to the current report.
+[`DiagnosticReport-select`](#fhir-resource-select) | This notification is sent to tell subscribers to make one or more images or observations visible (in focus), such as a measurement (or other finding).
+[`DiagnosticReport-close`](#fhir-resource-close) | This notification is used to close the current diagnostic report anchor context with the current state of the exchanged content stored by subscribed applications as appropriate and cleared from these applications and the Hub. 
 
-### Example Use Case
-A frequent scenario which illustrates a diagnostic report centered workflow involves an EHR, an image reading application, a reporting application, and an advanced quantification application.  The EHR, image reading application, and reporting application are authenticated and subscribed to the same topic using a FHIRcast Hub with the EHR establishing a patient context.  Using a reporting application, a clinical user decides to create a report by choosing an imaging study as the primary subject of the report.  The reporting application creates a report and then opens a diagnostic report context by posting a [`DiagnosticReport-open` request](#fhir-resource-open-message) to the Hub. On receiving the [`DiagnosticReport-open` event](#fhir-resource-open-message) from the Hub, an EHR decides not to react to this event noticing that the patient context has not changed. The image reading application responds to the event by opening the imaging study referenced in the `DiagnosticReport` anchor context.
+#### Example Use Case
+A frequent scenario which illustrates a diagnostic report centered workflow involves an EHR, an image reading application, a reporting application, and an advanced quantification application.  The EHR, image reading application, and reporting application are authenticated and subscribed to the same topic using a FHIRcast Hub with the EHR establishing a patient context.  Using a reporting application, a clinical user decides to create a report by choosing an imaging study as the primary subject of the report.  The reporting application creates a report and then opens a diagnostic report context by posting a [`DiagnosticReport-open`](#fhir-resource-open) request to the Hub. On receiving the [`DiagnosticReport-open`](#fhir-resource-open) event from the Hub, an EHR decides not to react to this event noticing that the patient context has not changed. The image reading application responds to the event by opening the imaging study referenced in the `DiagnosticReport` anchor context.
 
-The clinical user takes a measurement using the imaging reading application which then provides the reporting application this measurement by making a [`DiagnosticReport-update` request](#fhir-resource-update-message) to the Hub. The reporting application receives the measurement through a [`DiagnosticReport-update` event](#fhir-resource-update-message) from the Hub and adds this information to the report. As the clinical user continues the reporting process they select a measurement or other structured information in the reporting application, the reporting application may note this selection by posting a [`DiagnosticReport-select` request](#fhir-resource-select-message) to the Hub. Upon receiving the [`DiagnosticReport-select` event](#fhir-resource-select-message) the image reading application may navigate to the image on which this measurement was acquired.
+The clinical user takes a measurement using the imaging reading application which then provides the reporting application this measurement by making a [`DiagnosticReport-update`](#fhir-resource-update) request to the Hub. The reporting application receives the measurement through a [`DiagnosticReport-update`](#fhir-resource-update) event from the Hub and adds this information to the report. As the clinical user continues the reporting process they select a measurement or other structured information in the reporting application, the reporting application may note this selection by posting a [`DiagnosticReport-select`](#fhir-resource-select) request to the Hub. Upon receiving the [`DiagnosticReport-select`](#fhir-resource-select) event the image reading application may navigate to the image on which this measurement was acquired.
 
-At some point the image reading application (automatically or through user interaction) may determine that an advanced quantification application should be used and launches this application including the appropriate FHIRcast topic.  The advanced quantification application then requests the current context including any already exchanged structured information by making a [`GET` topic request](#GET-topic-request) to the Hub which returns the context in the response.
+At some point the image reading application (automatically or through user interaction) may determine that an advanced quantification application should be used and launches this application including the appropriate FHIRcast topic.  The advanced quantification application then requests the current context including any already exchanged structured information by making a [`GET Context`](#get-context) request to the Hub which returns the current context in the response.
 
-Finally the clinical user closes the report in the reporting application. The reporting application posts a [DiagnosticReport-close event](#diagnostic-report-close-message). Upon receipt of the [DiagnosticReport-close event](#diagnostic-report-close-message) both the imaging reading application and advanced quantification application close all relevant image studies.
-
+Finally the clinical user closes the report in the reporting application. The reporting application makes a [DiagnosticReport-close](#fhir-resource-close) request. Upon receipt of the [DiagnosticReport-close](#fhir-resource-close) event both the imaging reading application and advanced quantification application close all relevant image studies.
  
 ## Normative Standard
 ### Subscription Response
@@ -569,8 +567,8 @@ The following example shows adding an imaging study to the existing diagnostic r
 ```
 The HUB SHALL distribute a corresponding event to all applications currently subscribed to the topic. The Hub SHALL replace the `versionId` in the request with a new `versionId` generated and retained by the Hub.
 
-### Diagnostic Report Select Message
-The `DiagnosticReport-select` event will be posted to the Hub when an application desires to indicate that one or more FHIR resources are to be made visible, in focus or otherwise "selected". It is assumed that an observation with the specified `id` is contained in the current DiagnosticReport content, the Hub MAY or MAY NOT provide validation.
+### [FHIR resource]-select
+A `[FHIR resource]-select` event will be posted to the Hub when an application desires to indicate that one or more FHIR resources are to be made visible, in focus or otherwise "selected". It is assumed that an observation with the specified `id` is contained in the current anchor context's content, the Hub MAY or MAY NOT provide validation of its presence.
  
 This event allows other participating applications to adjust their UIs as appropriate.  For example, a reporting system may indicate that the user has selected a particular observation associated with a measurement value. After receiving this event an imaging reading application which created the measurement may wish to change its user display such that the image from which the measurement was acquired is visible.
 
@@ -582,8 +580,8 @@ Key | Optionality | Description
 `report`| REQUIRED | FHIR DiagnosticReport resource in context is included for risk mitigation. The `id` and `versionId` of the diagnostic report SHALL be provided; however, additional attributes MAY be present.
 `select`| REQUIRED | Contains zero or more references to selected resources. If a reference to a resource is present in the `select` array, there is an implicit unselect of any previously selected resource. If no resource references are present in the `select` array, this is an indication that any previously selected resource is now unselected.
 
-##### DiagnosticReport-select Example
-The following example shows the selection of a single Observation resource. 
+##### [FHIR resource]-select Example
+The following example shows the selection of a single Observation resource in an anchor context of a diagnostic report. 
 
 ```
 {
@@ -616,11 +614,11 @@ The following example shows the selection of a single Observation resource.
 }
 ```
 
-### Diagnostic Report Close Message
-The `DiagnosticReport-close` event is posted to the Hub when an application desires to close the active diagnostic report centered workflow.
+### [FHIR resource]-close
+The `[FHIR resource]-close` event is posted to the Hub when an application desires to close the active anchor context centered workflow.
 
-##### DiagnosticReport-close Example
-This example sets the `status` of the report to `final`.
+##### [FHIR resource]-close Example
+This example sets the `status` of a diagnostic report to `final`.
 
 ```
 {
