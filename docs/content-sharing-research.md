@@ -1,10 +1,10 @@
 # Background research for sharing content in a FHIRcast integration
 
-This is non-normative content representing a proposal for sharing additional information in a FHIRcast integration. 
+This is non-normative content representing a proposal for sharing additional information in a FHIRcast integration. This proposal is backwards compatible with FHIRcast STU2, requiring no changes to either FHIRcast clients or FHIRcast Hubs which are FHIRcast STU2 compatible.
 
 ## Sharing of Structured Information in a FHIRcast Context
 
-FHIRcast is a  standard for real-time context synchronization between healthcare applications. For example, a radiologist typically works in disparate client applications at the same time (e.g. a reporting application, a PACS viewer, an interactive AI application, and an EMR) and wants each of these systems to display the same study and patient simultaneously. In addition to basic context synchronization, this proposal extends FHIRcast to support real-time structured data exchange between client applications.
+FHIRcast is a  standard for real-time context synchronization between healthcare applications. For example, a radiologist typically works in disparate client applications at the same time (e.g. a reporting application, a PACS viewer, an interactive AI application, and an EMR). Clinical users want each of these systems to display use a shared context to synchronize their information displays to the same study and patient (and additional contextual subjects). In addition to basic context synchronization, this proposal extends FHIRcast to support real-time structured data exchange between synchronized client applications.
 
 #### Concepts and Terminology
 
@@ -13,20 +13,19 @@ In addition to the core FHIRcast constructs such as topics, subscriptions, and F
  Concept | Description
 --- | ---
 context | Resource on which the user is currently working such as documenting information associated with a patient's encounter with a care provider. In this case the context is a specific encounter and the patient who is the subject of the encounter.
-anchor context | A context which is serving as a container for FHIRcast events that enable sharing of content. The content sharing events include the anchor context and content shared in these events directly or indirectly reference the resource acting as the anchor context. Typical anchor contexts are resources such as Patient, Encounter, ImagingStudy, and DiagnosticReport.
-content | Resources created during a user's interaction with the active context. For example, if the current context is an imaging study the user may make a measurement resulting in an observation containing the measurement information. 
-
+anchor context | A context which is serving as a container for FHIRcast events that enable sharing of content. The content sharing events include the anchor context and content shared in these events. Typical anchor contexts are resources such as Patient, Encounter, ImagingStudy, and DiagnosticReport.
+content | Resources created during a user's interaction with the active context. For example, if the current context is an imaging study the user may make a measurement resulting in an observation containing the measurement information. The shared content either directly or indirectly references the resource acting as the anchor context.
 
 ##### Transactional Updates
 A key concept of the information sharing events is that information is shared in a transactional manner.
 
 ![**Transactional Updates**](img/TransactionalUpdates.png)
 
-The above diagram shows a series of operations beginning with an [`<DiagnosticReport>FHIR Resource>-open` request](#fhir-resource-open-message) followed by three [`<FHIR Resource>-update` requests](#fhir-resource-update-message).  The anchor context is built up by the successive [`<FHIR Resource>-update` requests](#fhir-resource-update-message) which contain only changes to the current state.  These changes are propagated by the Hub to all subscribed clients with the [`<FHIR Resource>-update` events](#fhir-resource-update-message) containing only the changes.
+The above diagram shows a series of operations beginning with a [`[FHIR resource]-open`](#fhir-resource-open) request followed by three [`<FHIR resource>-update`](#fhir-resource-update) requests.  The content in an anchor context is built up by the successive [`<FHIR resource>-update` requests](#fhir-resource-update) which contain only changes to the current state.  These changes are propagated by the Hub to all subscribed clients with the [`<FHIR Resource>-update` requests](#fhir-resource-update) containing only the changes to be made.
 
-In order to avoid lost updates and other out of sync conditions, the Hub serves as the transaction coordinator.  It fulfills this responsibility by creating a version of the information's state with each operation.  If an operation is requested with the client providing the incorrect version, this request is rejected.  This approach is similar to the version concurrency approach used by the FHIR standard ([FHIR versions and managing resource contention](https://www.hl7.org/fhir/http.html#concurrency)).  Additionally, many of the concepts have similarities to the [FHIR messaging mechanisms](https://www.hl7.org/fhir/messaging.html) and where possible the basic constructs of FHIRcast content sharing are aligned with FHIR Messaging.
+In order to avoid lost updates and other out of sync conditions, the Hub serves as the transaction coordinator.  It fulfills this responsibility by creating a version of the information's state with each operation.  If an operation is requested with the client providing an incorrect version, this request is rejected.  This approach is similar to the version concurrency approach used by [FHIR versions and managing resource contention](https://www.hl7.org/fhir/http.html#concurrency).  Additionally, many of the FHIRcast content sharing concepts have similarities to the [FHIR messaging mechanisms](https://www.hl7.org/fhir/messaging.html) and where possible the basic concepts are aligned.
 
-FHIR resources are using to convey the structure information being exchanged in [`<FHIR Resource>-update` operations](#fhir-resource-update-message).  However, it is possible that these resources are never persisted in a FHIR server.  During the exchange of information, resources may be very dynamic in nature with a user creating, modifying, and even removing information which is being exchanged.  For example, a measurement a user makes in an imaging application may be altered many times before it is finalized and it may be removed entirely.
+FHIR resources are using to convey the structured information being exchanged in [`<FHIR Resource>-update` operations](#fhir-resource-update-message).  However, it is important to not that these resources may never be persisted in a FHIR server.  During the exchange of information, resources may be very dynamic in nature with a user creating, modifying, and even removing information which is being exchanged.  For example, a measurement a user makes in an imaging application may be altered many times before it is finalized and it may be entirely removed from the content in the anchor context.
 
 ### Responsibilities of a FHIRcast Hub and a Subscribed Client
 
@@ -38,30 +37,28 @@ The existing responsibilities of a FHIRcast Hub remain when supporting informati
 Hubs must fulfill these addition responsibilities when they support the exchange of structured information:
 1. Assign and validate the diagnostic report's `versionId` when processing a [`<FHIR Resource>-update` request](#fhir-resource-update-message) or a [`<FHIR Resource>-select` request](#fhir-resource-select-message)
 2. Assign and maintain a current `versionId` of the content in the anchor context
-2. Validate every [`<FHIR Resource>-update` request](#fhir-resource-update-message) and [`<FHIR Resource>-select` request](#fhir-resource-select-message) for the current `versionId` and reject the request if the version is not correct; returning a `412 Precondition Failed` status code rather than updating the content
-3. Maintain a list of current FHIR resource content in the anchor context so that it may provide them in response to a <FHIR Resource>-open request and respond to a GET request
-4. When a [`<FHIR Resource>-close` request](#fhir-resource-close-message) is received, the Hub no longer retains the content for that anchor context
+3. Validate every [`<FHIR Resource>-update` request](#fhir-resource-update-message) and [`<FHIR Resource>-select` request](#fhir-resource-select-message) for the current `versionId` and reject the request if the version is not correct by returning a 4xx/5xx HTTP Status Code rather than updating the content
+4. Maintain a list of current FHIR resource content in the anchor context so that it may provide the anchor context's content in response to a <FHIR Resource>-open request and respond to a [`GET Context`](get-context) request
+5. When a [`<FHIR Resource>-close` request](#fhir-resource-close-message) is received, the Hub no longer retains the content for that anchor context
 
-A Hub is not responsible for structurally validating FHIR resources.  While a Hub must be able to successfully parse FHIR resources in a manner sufficient to perform its required capabilities (e.g. find the `id` of a resource and the `versionId` of the anchor resource), a Hub is not responsible for additional structural checking. 
+A Hub is not responsible for structurally validating FHIR resources.  While a Hub must be able to successfully parse FHIR resources in a manner sufficient to perform its required capabilities (e.g. find the `id` of a resource and the `versionId` of the anchor context), a Hub is not responsible for additional structural checking. 
 
-A Hub is not responsible for any long-term persistence of shared information and should purge the content when a [`DiagnosticReport-close`](#diagnostic-report-close-message) is received.
+A Hub is not responsible for any long-term persistence of shared information and should purge the content when a [`<FHIR Resource>-close` request](#fhir-resource-close-message) is received.
 
-Additionally, it is not a mandatory responsibility of a Hub to prevent applications participating in exchanging structured information from causing inconsistencies in exchanged information.  For example, an inconsistency would arise if an application removes an Observation resource on which another resource is based.  The Hub MAY check updates for such inconsistencies and fail the transaction with an appropriate error message; however, it is not required that the Hub perform such validation.  Additionally, a Hub MAY check for inconsistencies which it deems to be critical but not perform exhaustive validation. For example, a Hub could validate that the content in a `DiagnosticReport` anchor context always includes at least one primary imaging study.
+Additionally, it is not a mandatory responsibility of a Hub to prevent applications participating in exchanging structured information from causing inconsistencies in exchanged information.  For example, an inconsistency would arise if an application removes an Observation resource on which is referenced by another resource.  The Hub MAY check updates for such inconsistencies and fail the transaction with an appropriate error message; however, it is not required to do so.  Additionally, a Hub MAY check for inconsistencies which it deems to be critical but not perform exhaustive validation. For example, a Hub could validate that the content in a `DiagnosticReport` anchor context always includes at least one primary imaging study.
 
 Clients wishing to exchange structure information must:
 1. Adhere to a FHIRcast event naming convention as follows: <FHIR Resource>-[open, update, select, close]
 2. Use the <FHIR Resource>-open event to open a new resource which becomes the anchor context
-3. Make a <FHIR Resource>-update request following the specification as documented below and process the associated event; the <FHIR Resource>-update event contains a `Bundle` resource which is a collection of resources that are atomically processed by the Hub with the current FHIR resource content adjusted appropriately
+3. Make a <FHIR Resource>-update request when appropriate. The <FHIR Resource>-update event contains a `Bundle` resource which is a collection of resources that are atomically processed by the Hub with the anchor context's content being adjusted appropriately
 4. Maintain the current `versionId` of the anchor context provided by the Hub so that subsequent <FHIR Resource>-update requests may provide this `versionId`
-4. Appropriately process <FHIR Resource>-[open, update, select, close] events; note that a client may choose to ignore the contents of <FHIR Resource>-[update, select] events but should still track the `versionId` for subsequent use
-5. If a <FHIR Resource>-update request fails with the Hub returning a `412 Precondition Failed` status code, the client may issue a GET request to the Hub in order to retrieve the current content and associated version of the anchor context
-5. Clients will now receive a content payload (if one exists) in response to the Subscribe request which contains the current context and any content associated with the context.  Clients that don't support the exchange of structured information may ignore the contents of the response payload.
-6. For WebSocket subscriptions, this will be a change since the Subscribe method previously returned only a string value with the WebSocket endpoint URL.
-
+6. Appropriately process <FHIR Resource>-[open, update, select, close] events; note that a client may choose to ignore the contents of <FHIR Resource>-[update, select] events but should still track the `versionId` for subsequent use
+6. If a <FHIR Resource>-update request fails with the Hub, the client may issue a GET request to the Hub in order to retrieve the current content in the anchor context and its current version
+7. When using websockets, clients will now receive the current content (if any exists) of the anchor context (if one has been established) in response to the Subscribe request (see [return of current content](`websocket`-return-of-current-content)).  Clients that don't support the exchange of structured information may ignore the content of the Subscribe response payload.
 
 ### DIAGNOSTIC REPORT CENTERED WORKFLOW
 
-For the purpose simplifying the conveyance of  the information sharing mechanisms, further details will use a `DiagnosticReport` as the anchor context.  However, all of the below requests and messages support using other FHIR resource types as the anchor context.
+For the purpose simplifying the conveyance of the information sharing mechanisms, further details will use a `DiagnosticReport` as the anchor context.  However, all of the below requests and messages support using other FHIR resource types as the anchor context.
 
 #### Discussion
 When reporting applications integrate with PACS and/or RIS applications, a radiologist's (or other clinician's) workflow is centered on the final deliverable, a diagnostic report. In radiology the imaging study (exam) is an integral resource with the report referencing one or more imaging studies. Structured data, many times represented by an `Observation` resource, may also be captured as part of a report.  In addition to basic context synchronization, a diagnostic report centered workflow builds upon the basic FHIRcast transactions to support near real-time exchange of structured information between applications participating in a diagnostic report context.  Also, the `DiagnosticReport` resource contains certain attributes (such as report status), that are useful to the PACS/RIS applications and don't exist in other types of FHIR resources (e.g. an ImagingStudy).  Participating applications may include clients such as reporting applications, PACS, EHR, workflow orchestrators, and interactive AI applications.
@@ -85,18 +82,6 @@ Operation | Description
 [`DiagnosticReport-select`](#diagnostic-report-select-message) | This notification is sent to tell subscribers to make one or more images or observations visible (in focus), such as a measurement (or other finding).
 [`DiagnosticReport-close`](#diagnostic-report-close-message) | This notification is used to close the current diagnostic report anchor context with the current state of the exchanged content stored by subscribed applications as appropriate and cleared from these applications and the Hub. 
 
-### Supported User Stories
-A diagnostic report centered workflow supports the following user stories.
-
-I as a clinical user want to:
-1. open one or more applications through a single interaction in a **shared reporting session**  for a **new or existing** report
-2. use any application participating in the shared reporting session to **create, update, and delete structured information** and exchange this information with all other participating applications in a near real-time manner with **receiving applications using the information as appropriate to their function**
-3. **add a comparison study or a primary study** that was not originally a subject of the report in the reporting session
-4. open applications which can join an **existing reporting session**, have **access to information** which has been **previously exchanged**, and **immediately begin** exchanging structured information with other applications participating in the shared reporting session
-5. **select or deselect** a representation of shared structured information in one application with the other applications appropriately reacting to this new selection state
-6. **close the reporting session** in an orderly manner ensuring contextual consistency across all applications after the close operation is completed
-
-
 ### Example Use Case
 A frequent scenario which illustrates a diagnostic report centered workflow involves an EHR, an image reading application, a reporting application, and an advanced quantification application.  The EHR, image reading application, and reporting application are authenticated and subscribed to the same topic using a FHIRcast Hub with the EHR establishing a patient context.  Using a reporting application, a clinical user decides to create a report by choosing an imaging study as the primary subject of the report.  The reporting application creates a report and then opens a diagnostic report context by posting a [`DiagnosticReport-open` request](#fhir-resource-open-message) to the Hub. On receiving the [`DiagnosticReport-open` event](#fhir-resource-open-message) from the Hub, an EHR decides not to react to this event noticing that the patient context has not changed. The image reading application responds to the event by opening the imaging study referenced in the `DiagnosticReport` anchor context.
 
@@ -113,10 +98,10 @@ Upon receiving subscription or unsubscription requests, the Hub SHALL respond to
 
 If a Hub refuses the request or finds any errors in the subscription request, an appropriate HTTP error response code (4xx or 5xx) SHALL be returned. In the event of an error, the Hub SHOULD return a description of the error in the response body as plain text, to be used by the client developer to understand the error. This is not meant to be shown to the end user. Hubs MAY decide to reject some subscription requests based on their own policies.
 
-#### `websocket` Return of Current Context
-If using websockets and a Hub accepts the subscription request, the Hub MAY return the current context of the topic. The current context is returned in a `contexts` array in the JSON response body; if there is no current context the response SHALL contain an empty array ("[ ]").
+#### `websocket` Return of Current Content
+If using websockets and a Hub accepts the subscription request, the Hub MAY return the current context of the topic's anchor context. The current content is returned in a `contexts` array in the JSON response body; if there is no current content the response SHALL contain an empty array ("[ ]").
 
-If using webhooks the current context is not present in the subscription mechanism. After successful subscription, the subscriber may obtain the current context by making a [GetContext](#get-context) request.
+If using webhooks the current context is not present in the subscription mechanism. After successful subscription, the subscriber may obtain the current context by making a [Get Context](#get-context) request.
 
 ### `webhook` vs `websocket`
 
@@ -290,8 +275,9 @@ The Hub MAY return the content of the anchor context as elements without a "key"
   }
 ]
 ```
-
-### DiagnosticReport-open (QUESTION: should these events go into the FHIRcast event catalog?)
+ 
+(QUESTION: should these events go into the FHIRcast event catalog?)
+### [FHIR resource]-open
 A `DiagnosticReport-open` request is posted to the Hub when a new or existing report is opened by an application and established as the anchor context of a topic. The `context` field contains one `Patient` resource and one `DiagnosticReport` resource.
 
 When the Hub distributes a DiagnosticReport-open event, it associates a versionId with the DiagnosticReport.  Subscribed applications MUST submit this versionId in subsequent DiagnosticReport-update requests.
@@ -307,7 +293,7 @@ Key | Optionality | FHIR operation to generate context | Description
 `patient` | REQUIRED | `Patient/{id}?_elements=identifier` | FHIR Patient resource describing the patient associated with the diagnostic report currently in context.
 `study` | OPTIONAL | `ImagingStudy/{id}?_elements=identifier,accession` | FHIR ImagingStudy resource in context. Note that in addition to the request identifier and accession elements, the DICOM uid and FHIR patient reference are included because they're required by the FHIR specification.  Hub specific implementation guides may specify that this context is required.
 
-##### DiagnosticReport-open Example Request
+##### [FHIR resource]-open Example Request
 The following example shows a report being opened that contains a single primary study.  Note that the diagnostic report's `imagingStudy` and `subject` attributes have references to the imaging study and patient which are also in the open request.
 ```
 {
@@ -381,7 +367,7 @@ The following example shows a report being opened that contains a single primary
 }
 ```
 
-##### DiagnosticReport-open Event Example
+##### [FHIR resource]-open Event Example
 The event distributed by the Hub includes a meta section in the anchor context object (in this case a DiagnosticReport) with a versionId which will be used by subscribers to make subsequent DiagnosticReport-update requests.
 ```
 {
@@ -458,8 +444,8 @@ The event distributed by the Hub includes a meta section in the anchor context o
 }
 ```
 
-### Diagnostic Report Update Message
-A `DiagnosticReport-update` request will be posted to the Hub when an application desires a change be made to the current state of exchanged information or to add or remove an imaging study to the context of the report. One or more updates MAY occur while the report is open.
+### [FHIR resource]-update
+A `[FHIR resource]-update` request will be posted to the Hub when an application desires a change be made to the current state of exchanged information or to add or remove an imaging study to the context of the report. One or more updates MAY occur while the report is open.
 
 The updates could include (but are not limited to) any of the following:
 * adding, updating, or removing observations
