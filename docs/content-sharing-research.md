@@ -54,7 +54,7 @@ Clients wishing to exchange structure information must:
 4. Maintain the current `versionId` of the anchor context provided by the Hub so that a subsequent [`[FHIR resource]-update`](#fhir-resource-update) request may provide the current `versionId`
 5. Appropriately process [FHIR resource]-[open|update|select|close] events; note that a client may choose to ignore the contents of a [FHIR resource]-[open|update|select|close] event but should still track the `versionId` for subsequent use
 6. If a [`[FHIR resource]-update`](#fhir-resource-update) request fails with the Hub, the client may issue a [`GET Context`](#get-context) request to the Hub in order to retrieve the current content in the anchor context and its current `versionId`
-7. When using websockets, clients will now receive the current content (if any exists) of the anchor context (if one has been established) in response to the Subscribe request (see [return of current content](`websocket-return-of-current-content`)).  Clients that don't support the exchange of structured information may ignore the content of the Subscribe response payload.
+7. When using websockets, clients will now receive the current content (if any exists) of the anchor context (if one has been established) in response to the Subscribe request, see [`return of current content`](#websocket-return-of-current-content).  Clients that don't support the exchange of structured information may ignore the content of the Subscribe response payload.
 
 ### Example of Content Sharing in an Anchor Context
 The below example uses a `DiagnosticReport` as the anchor context.  However, the pattern of the example holds when other FHIR resource types are the anchor context.
